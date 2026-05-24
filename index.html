@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>変化検知実験</title>
+    <title>視覚と注意</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, sans-serif;
@@ -23,6 +23,7 @@
         #video-container { position: relative; display: inline-block; }
         video { display: block; max-width: 1000px; cursor: crosshair; }
         
+        /* 动态红圈的特效动画：出现后逐渐变大并变透明消失 */
         .click-marker {
             position: absolute; width: 30px; height: 30px;
             border: 3px solid red; border-radius: 50%;
@@ -38,13 +39,13 @@
 <body>
 
     <div id="intro-screen" class="container">
-        <h2>変化検知実験</h2>
-        <p style="color: #ffcccc; font-size: 1.2em; font-weight: bold;">
+        <h2>視覚と注意</h2>
+        <p style="color: #ffcccc; font-size: 1.2em; font-weight: bold; line-height: 1.6;">
             ・絶対に変化したと確信した場合に、その変化箇所をクリックしてください。<br>
-            ・複数変化がある場合、何度でもクリックできます。
+            ・複数変化がある場合、何度でもクリックできます。<br>
+            <span style="color: #ffeb3b;">・画面右下のロゴの変化は無視してください（クリック不要です）。</span>
         </p>
         <p>※本実験は匿名で行われます。個人情報は取得しません。</p>
-        <!-- 删除了原本的输入框 -->
         <button onclick="startExperiment()">実験を開始する</button>
     </div>
 
@@ -64,6 +65,7 @@
     </div>
 
     <script>
+        // 你的专属 Google Apps Script 网址
         const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyyTEOXxPEE5qRsNeBm6CbKNmvh83K9Fhn-SGVTojw-SRrtm9X-lyFGvp0cHFWiVmDj/exec";
         
         const videoFiles = [
@@ -83,7 +85,7 @@
 
         function startExperiment() {
             // 自动生成一个类似 Anon_8X3B9 的随机匿名ID
-            subjectId = 'Anon_' + Math.random().toString(36).substr(2, 5).toUpperCase();
+            subjectId = 'Anon_' + Math.random().toString(36).substring(2, 7).toUpperCase();
             
             document.getElementById('intro-screen').classList.add('hidden');
             document.getElementById('experiment-screen').classList.remove('hidden');
@@ -101,6 +103,7 @@
             videoElement.play();
         }
 
+        // 监听视频点击（允许多次点击）
         videoElement.addEventListener('click', function(event) {
             clicksInCurrentTrial++; 
 
@@ -121,6 +124,7 @@
                 y_percent: yPercent.toFixed(2)
             });
 
+            // 动态生成红圈特效
             const marker = document.createElement('div');
             marker.className = 'click-marker';
             marker.style.left = `${xPos}px`;
@@ -130,6 +134,7 @@
             setTimeout(() => { marker.remove(); }, 600);
         });
 
+        // 核心修改：视频必须播完才进入下一个
         videoElement.addEventListener('ended', function() {
             if (clicksInCurrentTrial === 0) {
                 experimentData.push({
@@ -142,6 +147,7 @@
             loadNextVideo();
         });
 
+        // 发送数据到谷歌表格
         function finishExperiment() {
             document.getElementById('experiment-screen').classList.add('hidden');
             document.getElementById('end-screen').classList.remove('hidden');
@@ -161,6 +167,7 @@
             });
         }
 
+        // 断网备用下载 CSV
         function downloadCSVFallback() {
             let csvContent = "Subject_ID,Video_Name,Click_Time_Sec,Click_X_Percent,Click_Y_Percent\n";
             experimentData.forEach(row => { csvContent += `${row.subject_id},${row.video_name},${row.click_time},${row.x_percent},${row.y_percent}\n`; });
