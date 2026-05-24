@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>変化検知実験</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background-color: #222; color: #fff;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            height: 100vh; margin: 0; overflow: hidden;
+        }
+        .container {
+            text-align: center; background: #333;
+            padding: 40px; border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); max-width: 800px;
+        }
+        .hidden { display: none !important; }
+        input[type="text"] { padding: 10px; font-size: 16px; margin-bottom: 20px; border-radius: 5px; }
+        button { padding: 10px 20px; font-size: 18px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px; }
+        button:hover { background: #0056b3; }
+        
+        /* 视频容器与红圈样式 */
+        #video-container { position: relative; display: inline-block; }
+        video { display: block; max-width: 1000px; cursor: crosshair; }
+        #click-marker {
+            position: absolute; width: 30px; height: 30px;
+            border: 3px solid red; border-radius: 50%;
+            transform: translate(-50%, -50%); /* 让红圈中心对准鼠标 */
+            pointer-events: none; /* 防止红圈阻挡后续点击 */
+        }
+    </style>
+</head>
+<body>
+
+    <div id="intro-screen" class="container">
+        <h2>変化検知実験</h2>
+        <p style="color: #ffcccc; font-size: 1.2em; font-weight: bold;">
+            ・絶対に変化したと確信した場合に、その変化箇所をクリックしてください。
+        </p>
+        <input type="text" id="subject-id" placeholder="被験者ID (例: Sub_01)" required><br>
+        <button onclick="startExperiment()">実験を開始する</button>
+    </div>
+
+    <div id="experiment-screen" class="hidden">
+        <h3 id="trial-counter" style="text-align: center;">Trial 1 / 5</h3>
+        <div id="video-container">
+            <video id="stimulus-video" preload="auto">
+                <source src="" type="video/mp4">
+            </video>
+            <!-- 点击时显示的红圈 -->
+            <div id="click-marker" class="hidden"></div>
+        </div>
+        <p style="text-align: center; margin-top: 15px;">変化を見つけたら、動画のその場所をクリックしてください</p>
+    </div>
+
+    <div id="end-screen" class="container hidden">
+        <h2 id="end-title">データ送信中...</h2>
+        <p id="end-text">そのままお待ちください。</p>
+    </div>
+
+    <script>
+        // 【！！！重要！！！】在这里粘贴你的 Google Apps Script 网址
+        const GOOGLE_SCRIPT_URL = "在这里粘贴你的_Web应用网址";
+        
+        const videoFiles = ['videos/r1.mp4', 'videos/r2.mp4', 'videos/r3.mp4', 'videos/r4.mp4', 'videos/r5.mp4'];
+        let currentTrial = 0;
+        let subjectId = '';
+        let experimentData = [];
+        let isProcessingClick = false; // 防止狂点鼠标
+
+        const videoElement = document.getElementById('stimulus-video');
+        const clickMarker = document.getElementById('click-marker');
+
+        function startExperiment() {
+            subjectId = document.getElementById('subject-id').value.trim();
+            if (!subjectId) { alert("被験者IDを入力してください。"); return; }
+            document.getElementById('intro-screen').classList.add('hidden');
+            document.getElementById('experiment-screen').classList.remove('hidden');
+            loadNextVideo();
+        }
+
+        function loadNextVideo() {
+            if (currentTrial >= videoFiles.length) {
+                finishExperiment();
+                return;
+            }
+            isProcessingClick = false;
+            clickMarker.classList.add('hidden'); // 隐藏红圈
+            document.getElementById('trial-counter').innerText = `Trial ${currentTrial + 1} / ${videoFiles.length}`;
+            videoElement.src = videoFiles[currentTrial];
+            videoElement.play();
+        }
+
+        // 核心：监听视频点击，并捕捉准确位置
+        videoElement.addEventListener('click', function(event) {
+            if (isProcessingClick) return; // 如果已经点击过，忽略额外点击
+            isProcessingClick = true;
+
+            const clickTime = videoElement.currentTime;
+            const rect = videoElement.getBoundingClientRect();
+            
+            // 计算相对于视频画面的坐标
+            const xPos = event.clientX - rect.left;
+            const yPos = event.clientY - rect.top;
+
+            // 转换为百分比（0-100），方便后续分析
+            const xPercent = (xPos / rect.width) * 100;
+            const yPercent = (yPos / rect.height) * 100;
+
+            // 记录数据
+            experimentData.push({
+                subject_id: subjectId,
+                video_name: videoFiles[currentTrial].replace('videos/', ''),
+                click_time: clickTime.toFixed(3),
+                x_percent: xPercent.toFixed(2),
+                y_percent: yPercent.toFixed(2)
+            });
+            
+            videoElement.pause();
+
+            // 在点击位置显示红圈视觉反馈
+            clickMarker.style.left = `${xPos}px`;
+            clickMarker.style.top = `${yPos}px`;
+            clickMarker.classList.remove('hidden');
+
+            // 停顿 0.6 秒让被试者看清红圈，然后进入下一个视频
+            setTimeout(() => {
+                currentTrial++;
+                loadNextVideo();
+            }, 600);
+        });
+
+        // 视频播放完毕未发现变化 (-1)
+        videoElement.addEventListener('ended', function() {
+            if (isProcessingClick) return;
+            experimentData.push({
+                subject_id: subjectId, video_name: videoFiles[currentTrial].replace('videos/', ''),
+                click_time: -1, x_percent: -1, y_percent: -1
+            });
+            currentTrial++;
+            loadNextVideo();
+        });
+
+        // 发送数据到谷歌表格
+        function finishExperiment() {
+            document.getElementById('experiment-screen').classList.add('hidden');
+            document.getElementById('end-screen').classList.remove('hidden');
+
+            fetch(GOOGLE_SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify(experimentData)
+            }).then(response => {
+                document.getElementById('end-title').innerText = "実験終了";
+                document.getElementById('end-text').innerText = "ご協力ありがとうございました。ブラウザを閉じてください。";
+            }).catch(error => {
+                document.getElementById('end-title').innerText = "送信エラー";
+                document.getElementById('end-text').innerText = "代わりに結果ファイルをダウンロードしました。担当者に送信してください。";
+                downloadCSVFallback();
+            });
+        }
+
+        // 备用下载方案（断网时触发）
+        function downloadCSVFallback() {
+            let csvContent = "Subject_ID,Video_Name,Click_Time_Sec,Click_X_Percent,Click_Y_Percent\n";
+            experimentData.forEach(row => { csvContent += `${row.subject_id},${row.video_name},${row.click_time},${row.x_percent},${row.y_percent}\n`; });
+            const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `Result_${subjectId}_Offline.csv`;
+            document.body.appendChild(link);
+            link.click();
+        }
+    </script>
+</body>
+</html>
