@@ -17,18 +17,21 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.5); max-width: 800px;
         }
         .hidden { display: none !important; }
-        input[type="text"] { padding: 10px; font-size: 16px; margin-bottom: 20px; border-radius: 5px; }
-        button { padding: 10px 20px; font-size: 18px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px; }
+        button { padding: 12px 24px; font-size: 18px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px; margin-top: 20px; }
         button:hover { background: #0056b3; }
         
-        /* 视频容器与红圈样式 */
         #video-container { position: relative; display: inline-block; }
         video { display: block; max-width: 1000px; cursor: crosshair; }
-        #click-marker {
+        
+        .click-marker {
             position: absolute; width: 30px; height: 30px;
             border: 3px solid red; border-radius: 50%;
-            transform: translate(-50%, -50%); /* 让红圈中心对准鼠标 */
-            pointer-events: none; /* 防止红圈阻挡后续点击 */
+            pointer-events: none; 
+            animation: fadeOut 0.6s forwards;
+        }
+        @keyframes fadeOut {
+            0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
         }
     </style>
 </head>
@@ -37,23 +40,22 @@
     <div id="intro-screen" class="container">
         <h2>変化検知実験</h2>
         <p style="color: #ffcccc; font-size: 1.2em; font-weight: bold;">
-            ・絶対に変化したと確信した場合に、その変化箇所をクリックしてください。
+            ・絶対に変化したと確信した場合に、その変化箇所をクリックしてください。<br>
+            ・複数変化がある場合、何度でもクリックできます。
         </p>
-        <input type="text" id="subject-id" placeholder="被験者ID (例: Sub_01)" required><br>
+        <p>※本実験は匿名で行われます。個人情報は取得しません。</p>
+        <!-- 删除了原本的输入框 -->
         <button onclick="startExperiment()">実験を開始する</button>
     </div>
 
     <div id="experiment-screen" class="hidden">
         <h3 id="trial-counter" style="text-align: center;">Trial 1 / 5</h3>
         <div id="video-container">
-            <!-- 加上了 muted 和 playsinline 防止浏览器因限制自动播放而显示黑屏 -->
             <video id="stimulus-video" preload="auto" muted playsinline>
                 <source src="" type="video/mp4">
             </video>
-            <!-- 点击时显示的红圈 -->
-            <div id="click-marker" class="hidden"></div>
         </div>
-        <p style="text-align: center; margin-top: 15px;">変化を見つけたら、動画のその場所をクリックしてください</p>
+        <p style="text-align: center; margin-top: 15px;">変化を見つけたら、動画のその場所をクリックしてください（複数回クリック可能）</p>
     </div>
 
     <div id="end-screen" class="container hidden">
@@ -62,10 +64,8 @@
     </div>
 
     <script>
-        // 填入了你的专属 Google Apps Script 网址
         const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyyTEOXxPEE5qRsNeBm6CbKNmvh83K9Fhn-SGVTojw-SRrtm9X-lyFGvp0cHFWiVmDj/exec";
         
-        // 使用了新的压缩视频文件夹路径
         const videoFiles = [
             'videos_compressed/r1.mp4', 
             'videos_compressed/r2.mp4', 
@@ -76,14 +76,15 @@
         let currentTrial = 0;
         let subjectId = '';
         let experimentData = [];
-        let isProcessingClick = false;
+        let clicksInCurrentTrial = 0;
 
         const videoElement = document.getElementById('stimulus-video');
-        const clickMarker = document.getElementById('click-marker');
+        const videoContainer = document.getElementById('video-container');
 
         function startExperiment() {
-            subjectId = document.getElementById('subject-id').value.trim();
-            if (!subjectId) { alert("被験者IDを入力してください。"); return; }
+            // 自动生成一个类似 Anon_8X3B9 的随机匿名ID
+            subjectId = 'Anon_' + Math.random().toString(36).substr(2, 5).toUpperCase();
+            
             document.getElementById('intro-screen').classList.add('hidden');
             document.getElementById('experiment-screen').classList.remove('hidden');
             loadNextVideo();
@@ -94,17 +95,14 @@
                 finishExperiment();
                 return;
             }
-            isProcessingClick = false;
-            clickMarker.classList.add('hidden');
+            clicksInCurrentTrial = 0;
             document.getElementById('trial-counter').innerText = `Trial ${currentTrial + 1} / ${videoFiles.length}`;
             videoElement.src = videoFiles[currentTrial];
             videoElement.play();
         }
 
-        // 监听视频点击
         videoElement.addEventListener('click', function(event) {
-            if (isProcessingClick) return;
-            isProcessingClick = true;
+            clicksInCurrentTrial++; 
 
             const clickTime = videoElement.currentTime;
             const rect = videoElement.getBoundingClientRect();
@@ -115,7 +113,6 @@
             const xPercent = (xPos / rect.width) * 100;
             const yPercent = (yPos / rect.height) * 100;
 
-            // 记录数据，并将 videos_compressed 前缀去掉，让表格更整洁
             experimentData.push({
                 subject_id: subjectId,
                 video_name: videoFiles[currentTrial].replace('videos_compressed/', ''),
@@ -123,33 +120,28 @@
                 x_percent: xPercent.toFixed(2),
                 y_percent: yPercent.toFixed(2)
             });
-            
-            videoElement.pause();
 
-            // 显示红圈反馈
-            clickMarker.style.left = `${xPos}px`;
-            clickMarker.style.top = `${yPos}px`;
-            clickMarker.classList.remove('hidden');
+            const marker = document.createElement('div');
+            marker.className = 'click-marker';
+            marker.style.left = `${xPos}px`;
+            marker.style.top = `${yPos}px`;
+            videoContainer.appendChild(marker);
 
-            setTimeout(() => {
-                currentTrial++;
-                loadNextVideo();
-            }, 600);
+            setTimeout(() => { marker.remove(); }, 600);
         });
 
-        // 视频播完没点击 (-1)
         videoElement.addEventListener('ended', function() {
-            if (isProcessingClick) return;
-            experimentData.push({
-                subject_id: subjectId, 
-                video_name: videoFiles[currentTrial].replace('videos_compressed/', ''),
-                click_time: -1, x_percent: -1, y_percent: -1
-            });
+            if (clicksInCurrentTrial === 0) {
+                experimentData.push({
+                    subject_id: subjectId, 
+                    video_name: videoFiles[currentTrial].replace('videos_compressed/', ''),
+                    click_time: -1, x_percent: -1, y_percent: -1
+                });
+            }
             currentTrial++;
             loadNextVideo();
         });
 
-        // 发送数据到谷歌表格
         function finishExperiment() {
             document.getElementById('experiment-screen').classList.add('hidden');
             document.getElementById('end-screen').classList.remove('hidden');
@@ -169,7 +161,6 @@
             });
         }
 
-        // 断网备用下载
         function downloadCSVFallback() {
             let csvContent = "Subject_ID,Video_Name,Click_Time_Sec,Click_X_Percent,Click_Y_Percent\n";
             experimentData.forEach(row => { csvContent += `${row.subject_id},${row.video_name},${row.click_time},${row.x_percent},${row.y_percent}\n`; });
