@@ -46,7 +46,8 @@
     <div id="experiment-screen" class="hidden">
         <h3 id="trial-counter" style="text-align: center;">Trial 1 / 5</h3>
         <div id="video-container">
-            <video id="stimulus-video" preload="auto">
+            <!-- 加上了 muted 和 playsinline 防止浏览器因限制自动播放而显示黑屏 -->
+            <video id="stimulus-video" preload="auto" muted playsinline>
                 <source src="" type="video/mp4">
             </video>
             <!-- 点击时显示的红圈 -->
@@ -61,14 +62,21 @@
     </div>
 
     <script>
-        // 【！！！重要！！！】在这里粘贴你的 Google Apps Script 网址
-        const GOOGLE_SCRIPT_URL = "在这里粘贴你的_Web应用网址";
+        // 填入了你的专属 Google Apps Script 网址
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyyTEOXxPEE5qRsNeBm6CbKNmvh83K9Fhn-SGVTojw-SRrtm9X-lyFGvp0cHFWiVmDj/exec";
         
-        const videoFiles = ['videos_compressed/r1.mp4', 'videos_compressed/r2.mp4', 'videos_compressed/r3.mp4', 'videos_compressed/r4.mp4', 'videos_compressed/r5.mp4'];
+        // 使用了新的压缩视频文件夹路径
+        const videoFiles = [
+            'videos_compressed/r1.mp4', 
+            'videos_compressed/r2.mp4', 
+            'videos_compressed/r3.mp4', 
+            'videos_compressed/r4.mp4', 
+            'videos_compressed/r5.mp4'
+        ];
         let currentTrial = 0;
         let subjectId = '';
         let experimentData = [];
-        let isProcessingClick = false; // 防止狂点鼠标
+        let isProcessingClick = false;
 
         const videoElement = document.getElementById('stimulus-video');
         const clickMarker = document.getElementById('click-marker');
@@ -87,32 +95,30 @@
                 return;
             }
             isProcessingClick = false;
-            clickMarker.classList.add('hidden'); // 隐藏红圈
+            clickMarker.classList.add('hidden');
             document.getElementById('trial-counter').innerText = `Trial ${currentTrial + 1} / ${videoFiles.length}`;
             videoElement.src = videoFiles[currentTrial];
             videoElement.play();
         }
 
-        // 核心：监听视频点击，并捕捉准确位置
+        // 监听视频点击
         videoElement.addEventListener('click', function(event) {
-            if (isProcessingClick) return; // 如果已经点击过，忽略额外点击
+            if (isProcessingClick) return;
             isProcessingClick = true;
 
             const clickTime = videoElement.currentTime;
             const rect = videoElement.getBoundingClientRect();
             
-            // 计算相对于视频画面的坐标
             const xPos = event.clientX - rect.left;
             const yPos = event.clientY - rect.top;
 
-            // 转换为百分比（0-100），方便后续分析
             const xPercent = (xPos / rect.width) * 100;
             const yPercent = (yPos / rect.height) * 100;
 
-            // 记录数据
+            // 记录数据，并将 videos_compressed 前缀去掉，让表格更整洁
             experimentData.push({
                 subject_id: subjectId,
-                video_name: videoFiles[currentTrial].replace('videos/', ''),
+                video_name: videoFiles[currentTrial].replace('videos_compressed/', ''),
                 click_time: clickTime.toFixed(3),
                 x_percent: xPercent.toFixed(2),
                 y_percent: yPercent.toFixed(2)
@@ -120,23 +126,23 @@
             
             videoElement.pause();
 
-            // 在点击位置显示红圈视觉反馈
+            // 显示红圈反馈
             clickMarker.style.left = `${xPos}px`;
             clickMarker.style.top = `${yPos}px`;
             clickMarker.classList.remove('hidden');
 
-            // 停顿 0.6 秒让被试者看清红圈，然后进入下一个视频
             setTimeout(() => {
                 currentTrial++;
                 loadNextVideo();
             }, 600);
         });
 
-        // 视频播放完毕未发现变化 (-1)
+        // 视频播完没点击 (-1)
         videoElement.addEventListener('ended', function() {
             if (isProcessingClick) return;
             experimentData.push({
-                subject_id: subjectId, video_name: videoFiles[currentTrial].replace('videos/', ''),
+                subject_id: subjectId, 
+                video_name: videoFiles[currentTrial].replace('videos_compressed/', ''),
                 click_time: -1, x_percent: -1, y_percent: -1
             });
             currentTrial++;
@@ -156,13 +162,14 @@
                 document.getElementById('end-title').innerText = "実験終了";
                 document.getElementById('end-text').innerText = "ご協力ありがとうございました。ブラウザを閉じてください。";
             }).catch(error => {
+                console.error(error);
                 document.getElementById('end-title').innerText = "送信エラー";
                 document.getElementById('end-text').innerText = "代わりに結果ファイルをダウンロードしました。担当者に送信してください。";
                 downloadCSVFallback();
             });
         }
 
-        // 备用下载方案（断网时触发）
+        // 断网备用下载
         function downloadCSVFallback() {
             let csvContent = "Subject_ID,Video_Name,Click_Time_Sec,Click_X_Percent,Click_Y_Percent\n";
             experimentData.forEach(row => { csvContent += `${row.subject_id},${row.video_name},${row.click_time},${row.x_percent},${row.y_percent}\n`; });
